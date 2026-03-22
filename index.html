@@ -1652,8 +1652,8 @@
   <div class="admin-header">
     <div class="admin-title">⚡ ADMIN PANEL — ALPHA OS</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button class="btn-save-settings" onclick="exportUsers()" style="margin-top:0;padding:10px 20px">📤 Export CSV + Sheet</button>
-      <button class="btn-save-settings" onclick="window.open('https://sheetdb.io/api/v1/rjrjy10szgvsw?sheet=users','_blank')" style="margin-top:0;padding:10px 20px;background:linear-gradient(135deg,#00c853,#00695c)">📊 Google Sheet</button>
+      <button class="btn-save-settings" onclick="exportUsers()" style="margin-top:0;padding:10px 20px">📤 Export CSV</button>
+      <button class="btn-save-settings" onclick="openGasSheet()" style="margin-top:0;padding:10px 20px;background:linear-gradient(135deg,#00c853,#00695c)">📊 Google Sheet</button>
       <button class="btn-save-settings" onclick="forceSheetInit()" style="margin-top:0;padding:10px 20px;background:linear-gradient(135deg,#ff6f00,#e65100)">🔧 Initialiser Sheet</button>
       <button class="btn-save-settings" onclick="runSheetDiagnostic()" style="margin-top:0;padding:10px 20px;background:linear-gradient(135deg,#1565c0,#0d47a1)">🔍 Diagnostic</button>
       <button class="admin-logout" onclick="closeAdmin()">← Retour au site</button>
@@ -1663,15 +1663,14 @@
 
   <!-- GOOGLE SHEET INFO BANNER -->
   <div style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:12px;padding:16px 20px;margin-bottom:20px;">
-    <div style="font-family:'Orbitron',sans-serif;font-size:0.7rem;color:var(--win-color);letter-spacing:2px;margin-bottom:8px;">📊 GOOGLE SHEETS — BASE DE DONNÉES CONNECTÉE</div>
+    <div style="font-family:'Orbitron',sans-serif;font-size:0.7rem;color:var(--win-color);letter-spacing:2px;margin-bottom:8px;">📊 GOOGLE APPS SCRIPT — BASE DE DONNÉES CONNECTÉE</div>
     <div style="font-family:'Rajdhani',sans-serif;font-size:0.85rem;color:rgba(255,255,255,0.8);line-height:1.7;">
-      API : <strong style="color:var(--neon)">sheetdb.io/api/v1/rjrjy10szgvsw</strong><br>
+      API : <strong style="color:var(--neon)" id="gasUrlDisplay">⚙️ Configurez GAS_URL dans le code</strong><br>
       <span style="color:rgba(255,255,255,0.5);font-size:0.8rem;">
-        <strong style="color:var(--gold)">Comment ça marche :</strong> SheetDB lit la <strong>ligne 1</strong> de chaque onglet comme noms de colonnes.
-        Si les onglets sont vides, cliquez sur <strong>🔧 Initialiser Sheet</strong> — les en-têtes et données seront créés automatiquement.<br>
+        <strong style="color:var(--gold)">Comment ça marche :</strong> Votre Google Apps Script déployé sert d'API REST privée. Il lit/écrit directement dans votre Google Sheet sans intermédiaire.<br>
         <strong style="color:var(--gold)">Onglet "users"</strong> : email · prenom · nom · telephone · codePostal · motDePasse · inscription · derniereConnexion · parties · victoires · defaites · aJoue · ip · latitude · longitude · batterie · etatCharge · appareil · resolution · langue · cadeauxGagnes<br>
         <strong style="color:var(--gold)">Onglet "settings"</strong> : id · restaurantName · commerceType · winFrequency · rewardName · description · phone · address · hours<br>
-        <strong style="color:#ffcc00;">⚠️ Dans SheetDB, vérifiez que POST, PATCH et DELETE sont bien activés pour cette API.</strong>
+        <strong style="color:#ffcc00;">⚠️ Dans votre GAS, déployez en tant que : "Exécuter en tant que Moi" + "Accessible à : Tout le monde".</strong>
       </span>
     </div>
     <div id="sheetStatusBadge" style="margin-top:10px;font-family:'Rajdhani',sans-serif;font-size:0.85rem;color:var(--neon);">⏳ Vérification de la connexion…</div>
@@ -1744,6 +1743,14 @@
         <label>Description personnalisée (affichée sous la roue)</label>
         <textarea id="settingDescription" oninput="onSettingChange()" placeholder="Tournez la roue et tentez de gagner un cadeau offert par votre restaurant préféré !"></textarea>
       </div>
+      <div class="setting-item">
+        <label>🌐 Lien Avis Google</label>
+        <input type="url" id="settingGoogleUrl" oninput="onSettingChange()" placeholder="https://g.page/r/VOTRE_ID/review"/>
+      </div>
+      <div class="setting-item">
+        <label>📸 Lien Instagram</label>
+        <input type="url" id="settingInstaUrl" oninput="onSettingChange()" placeholder="https://instagram.com/votre_compte"/>
+      </div>
     </div>
     <button class="btn-save-settings" onclick="saveSettings()">💾 SAUVEGARDER LES PARAMÈTRES</button>
   </div>
@@ -1763,23 +1770,181 @@
 <!-- NOTIFICATION -->
 <div id="notification"></div>
 
+<!-- ══════════════════ POPUP AVIS GOOGLE / INSTAGRAM ══════════════════ -->
+<div class="modal-overlay" id="reviewPopup">
+  <div class="modal-box" style="max-width:420px;text-align:center;">
+
+    <div style="font-size:3rem;margin-bottom:10px;animation:iconFloat 3s ease-in-out infinite;">⭐</div>
+
+    <div class="modal-title">
+      <div class="modal-title-line1">AVANT DE JOUER</div>
+      <div class="modal-title-line2" id="reviewPopupSubtitle">AIDEZ-NOUS EN 10 SECONDES !</div>
+    </div>
+
+    <div style="font-family:'Rajdhani',sans-serif;font-size:0.95rem;color:rgba(255,255,255,0.8);line-height:1.7;margin:14px 0 20px;">
+      Laissez-nous un petit avis sur Google ou Instagram —<br>
+      <strong style="color:var(--gold)">ça nous aide énormément</strong> et ça prend moins d'une minute ! 🙏
+    </div>
+
+    <!-- Boutons avis -->
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:18px;">
+
+      <a id="reviewGoogleBtn" href="#" target="_blank" rel="noopener"
+        onclick="closeReviewPopup()"
+        style="display:flex;align-items:center;justify-content:center;gap:12px;
+               padding:14px 24px;
+               background:linear-gradient(135deg,#4285F4,#34A853);
+               border:none;border-radius:14px;
+               font-family:'Orbitron',sans-serif;font-size:0.8rem;font-weight:700;
+               color:#fff;letter-spacing:2px;text-decoration:none;
+               box-shadow:0 0 30px rgba(66,133,244,0.5);
+               transition:all 0.3s;cursor:pointer;">
+        <span style="font-size:1.4rem;">🌐</span>
+        LAISSER UN AVIS GOOGLE
+      </a>
+
+      <a id="reviewInstaBtn" href="#" target="_blank" rel="noopener"
+        onclick="closeReviewPopup()"
+        style="display:flex;align-items:center;justify-content:center;gap:12px;
+               padding:14px 24px;
+               background:linear-gradient(135deg,#833AB4,#FD1D1D,#FCB045);
+               border:none;border-radius:14px;
+               font-family:'Orbitron',sans-serif;font-size:0.8rem;font-weight:700;
+               color:#fff;letter-spacing:2px;text-decoration:none;
+               box-shadow:0 0 30px rgba(253,29,29,0.4);
+               transition:all 0.3s;cursor:pointer;">
+        <span style="font-size:1.4rem;">📸</span>
+        NOUS SUIVRE SUR INSTAGRAM
+      </a>
+    </div>
+
+    <button onclick="closeReviewPopup()"
+      style="background:transparent;border:1px solid rgba(255,255,255,0.2);border-radius:10px;
+             color:rgba(255,255,255,0.4);font-family:'Rajdhani',sans-serif;
+             font-size:0.85rem;padding:10px 24px;cursor:pointer;
+             transition:all 0.3s;letter-spacing:1px;">
+      ⏭️ Passer et jouer directement
+    </button>
+
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════════
      ██████████ JAVASCRIPT ██████████
 ══════════════════════════════════════════════════ -->
 <script>
-/* ═══════════════════════════════════════════════════════════
-   GOOGLE SHEETS — BASE DE DONNÉES BIDIRECTIONNELLE
-   API SheetDB : https://sheetdb.io/api/v1/rjrjy10szgvsw
-   🔐 Auth basique supportée — renseignez SHEETDB_USER/PASS si activée
-═══════════════════════════════════════════════════════════ */
-const SHEETDB     = 'https://sheetdb.io/api/v1/rjrjy10szgvsw';
+/* ═══════════════════════════════════════════════════════════════════════
+   ██████  GOOGLE APPS SCRIPT — BASE DE DONNÉES UNIQUE (GAS)  ██████
+   ▸ Remplace SheetDB par votre propre Google Apps Script déployé
+   ▸ Collez ici l'URL de déploiement de votre Web App GAS
+   ▸ Format attendu : https://script.google.com/macros/s/VOTRE_ID/exec
+   ▸ Le script GAS doit accepter : GET ?action=... & POST JSON body
+   ════════════════════════════════════════════════════════════════════════
+   📋 CODE GOOGLE APPS SCRIPT À COLLER DANS script.google.com :
+
+   const SHEET_ID = SpreadsheetApp.getActiveSpreadsheet().getId();
+
+   function doGet(e) {
+     const action = e.parameter.action;
+     const sheet  = e.parameter.sheet || 'users';
+     const ss     = SpreadsheetApp.openById(SHEET_ID);
+     const tab    = ss.getSheetByName(sheet) || ss.insertSheet(sheet);
+     const rows   = tab.getDataRange().getValues();
+     if (rows.length === 0) return json([]);
+     const headers = rows[0];
+     const data = rows.slice(1).map(r => {
+       const obj = {};
+       headers.forEach((h,i) => { obj[h] = r[i] !== undefined ? String(r[i]) : ''; });
+       return obj;
+     });
+     if (action === 'findByEmail') {
+       const email = (e.parameter.email||'').toLowerCase();
+       const found = data.find(d => (d.email||'').toLowerCase() === email);
+       return json(found || null);
+     }
+     return json(data);
+   }
+
+   function doPost(e) {
+     try {
+       const body   = JSON.parse(e.postData.contents);
+       const action = body.action;
+       const sheet  = body.sheet || 'users';
+       const ss     = SpreadsheetApp.openById(SHEET_ID);
+       let tab      = ss.getSheetByName(sheet);
+       if (!tab) tab = ss.insertSheet(sheet);
+
+       if (action === 'init') {
+         if (tab.getLastRow() === 0) {
+           tab.appendRow(body.headers);
+         }
+         return json({ok:true});
+       }
+
+       if (action === 'upsert') {
+         const keyCol = body.keyCol;
+         const keyVal = String(body.keyVal).toLowerCase();
+         const row    = body.data;
+         const all    = tab.getDataRange().getValues();
+         if (all.length === 0) { tab.appendRow(body.headers||[]); }
+         const headers = tab.getRange(1,1,1,tab.getLastColumn()).getValues()[0];
+         const colIdx  = headers.indexOf(keyCol);
+         let   found   = -1;
+         if (colIdx >= 0) {
+           for (let i=1; i<tab.getLastRow(); i++) {
+             const cell = String(tab.getRange(i+1,colIdx+1).getValue()).toLowerCase();
+             if (cell === keyVal) { found = i+1; break; }
+           }
+         }
+         const rowArr = headers.map(h => row[h] !== undefined ? row[h] : '');
+         if (found > 0) {
+           tab.getRange(found, 1, 1, rowArr.length).setValues([rowArr]);
+         } else {
+           if (tab.getLastRow() === 0) tab.appendRow(headers);
+           tab.appendRow(rowArr);
+         }
+         return json({ok:true});
+       }
+
+       if (action === 'delete') {
+         const keyCol = body.keyCol;
+         const keyVal = String(body.keyVal).toLowerCase();
+         const headers = tab.getRange(1,1,1,tab.getLastColumn()).getValues()[0];
+         const colIdx  = headers.indexOf(keyCol);
+         if (colIdx < 0) return json({ok:false,msg:'colonne introuvable'});
+         for (let i=tab.getLastRow(); i>1; i--) {
+           const cell = String(tab.getRange(i,colIdx+1).getValue()).toLowerCase();
+           if (cell === keyVal) { tab.deleteRow(i); break; }
+         }
+         return json({ok:true});
+       }
+
+       return json({ok:false, msg:'action inconnue'});
+     } catch(err) {
+       return json({ok:false, msg:err.message});
+     }
+   }
+
+   function json(data) {
+     return ContentService
+       .createTextOutput(JSON.stringify(data))
+       .setMimeType(ContentService.MimeType.JSON);
+   }
+   ════════════════════════════════════════════════════════════════════════ */
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  🔧 CONFIGURATION — MODIFIEZ UNIQUEMENT CETTE LIGNE         ║
+// ╚══════════════════════════════════════════════════════════════╝
+const GAS_URL = 'COLLEZ_ICI_VOTRE_URL_GOOGLE_APPS_SCRIPT';
+// Exemple : 'https://script.google.com/macros/s/AKfycbxxxxxxx/exec'
+
+// Noms des onglets (ne pas modifier sauf si vous les renommez dans le Sheet)
 const SHEET_USERS = 'users';
 const SHEET_CFG   = 'settings';
 
-// 🔐 Auth basique SheetDB (optionnelle, fonctionne sans blocage CORS)
-const SHEETDB_USER = '18w0b1xw';
-const SHEETDB_PASS = 'jtw6r1entpnk7lxhqthc';
-
+// ═══════════════════════════════════════════════════════════════════════
+//  COLONNES GOOGLE SHEET — NE PAS MODIFIER (ordre important)
+// ═══════════════════════════════════════════════════════════════════════
 const USERS_HEADERS = [
   'email','prenom','nom','telephone','codePostal','motDePasse',
   'inscription','derniereConnexion','parties','victoires','defaites',
@@ -1790,112 +1955,152 @@ const USERS_HEADERS = [
 
 const SETTINGS_HEADERS = [
   'id','restaurantName','commerceType','winFrequency','rewardName',
-  'description','phone','address','hours'
+  'description','phone','address','hours','googleReviewUrl','instagramUrl'
 ];
 
+// ═══════════════════════════════════════════════════════════════════════
+//  CONFIG ADMIN — TOUTES LES VARIABLES MODIFIABLES
+//  Ces valeurs constituent la "base de données admin" sauvegardée sur Sheet
+// ═══════════════════════════════════════════════════════════════════════
+const ADMIN_CONFIG = {
+  // Identifiants admin (ne jamais partager)
+  adminEmail:    'strassweb67@gmail.com',
+  adminPassHash: btoa('Treza670'),          // mot de passe admin encodé
+
+  // Informations du commerce (modifiables via le panel admin)
+  restaurantName: 'LE GRAND VIP',
+  commerceType:   'restaurant',
+  phone:          '03 53 63 03 32',
+  address:        '',
+  hours:          '',
+  description:    '',
+  rewardName:     'Menu Offert 🍽️',
+  winFrequency:   50,                       // 1 gagnant toutes les N roues
+
+  // ── Liens réseaux sociaux (popup avis) ──
+  googleReviewUrl:   '',                    // ex: https://g.page/r/VOTRE_ID/review
+  instagramUrl:      '',                    // ex: https://instagram.com/votre_compte
+
+  // Branding Alpha OS
+  companyName:    'Alpha OS — Groupe Alpha Nex',
+  companyCity:    'Strasbourg',
+  companyPhone:   '03 53 63 03 32',
+  appVersion:     'v3.0-GAS',
+  deployDate:     new Date().toISOString().slice(0,10)
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+//  STATE INTERNE — LOG & CONNEXION
+// ═══════════════════════════════════════════════════════════════════════
 let _sheetReady = false;
 let _sheetError = '';
 let _sheetLog   = [];
 
 function _sheetLogAdd(op, ok, detail=''){
-  _sheetLog.unshift({ts:new Date().toLocaleTimeString('fr-FR'), op, ok, detail});
-  if(_sheetLog.length>40) _sheetLog.pop();
+  _sheetLog.unshift({ ts: new Date().toLocaleTimeString('fr-FR'), op, ok, detail });
+  if(_sheetLog.length > 40) _sheetLog.pop();
 }
 
-function _authHeader(){
-  if(SHEETDB_USER && SHEETDB_PASS)
-    return {'Authorization':'Basic '+btoa(SHEETDB_USER+':'+SHEETDB_PASS)};
-  return {};
-}
+// ═══════════════════════════════════════════════════════════════════════
+//  COUCHE D'ABSTRACTION FETCH — Google Apps Script via fetch()
+//  • GET  → URL?action=X&sheet=Y&...params
+//  • POST → body JSON { action, sheet, data, ... }
+//  GAS répond toujours en JSON.
+// ═══════════════════════════════════════════════════════════════════════
 
-/* ── fetch avec timeout (10s) ── */
-async function sheetFetch(url, options={}, ms=10000){
+/* ── Timeout wrapper ── */
+async function _gasFetch(urlOrOptions, ms=12000){
+  if(GAS_URL === 'COLLEZ_ICI_VOTRE_URL_GOOGLE_APPS_SCRIPT'){
+    _sheetError = 'URL GAS non configurée';
+    _sheetLogAdd('CONFIG',false,'GAS_URL non définie — collez votre URL de déploiement');
+    return null;
+  }
   const ctrl = new AbortController();
   const t = setTimeout(()=>ctrl.abort(), ms);
   try{
-    const isWrite = options.method && options.method!=='GET';
-    const headers = isWrite
-      ? {'Content-Type':'application/json', ..._authHeader()}
-      : {..._authHeader()};
-    const r = await fetch(url, {...options, headers, signal:ctrl.signal});
+    let resp;
+    if(typeof urlOrOptions === 'string'){
+      // GET
+      resp = await fetch(urlOrOptions, { signal: ctrl.signal });
+    } else {
+      // POST
+      resp = await fetch(GAS_URL, {
+        method: 'POST',
+        signal: ctrl.signal,
+        headers: { 'Content-Type': 'text/plain' }, // GAS requiert text/plain pour éviter pre-flight CORS
+        body: JSON.stringify(urlOrOptions)
+      });
+    }
     clearTimeout(t);
-    return r;
-  }catch(e){
+    if(!resp.ok){ _sheetError = `HTTP ${resp.status}`; return null; }
+    const data = await resp.json();
+    _sheetReady = true; _sheetError = '';
+    return data;
+  } catch(e){
     clearTimeout(t);
-    _sheetError = e.name==='AbortError' ? 'Timeout (>10s)' : e.message;
+    _sheetError = e.name === 'AbortError' ? 'Timeout (>12s)' : e.message;
     return null;
   }
 }
 
-/* ── GET — null=erreur réseau, []=onglet vide mais accessible ── */
+/* ── GET toutes les lignes d'un onglet ── */
 async function sheetGet(sheet){
-  try{
-    const r = await sheetFetch(`${SHEETDB}?sheet=${sheet}`);
-    if(!r){
-      _sheetLogAdd(`GET ${sheet}`,false,_sheetError||'Timeout');
-      return null; // null = erreur réseau ou timeout
-    }
-    if(!r.ok){
-      _sheetLogAdd(`GET ${sheet}`,false,`HTTP ${r.status}`);
-      return null; // null = HTTP error
-    }
-    const data = await r.json();
-    _sheetReady = true; _sheetError = '';
-    const rows = Array.isArray(data) ? data : [];
-    _sheetLogAdd(`GET ${sheet}`,true,`${rows.length} ligne(s)`);
-    return rows; // [] = onglet vide mais OK
-  }catch(e){ _sheetLogAdd(`GET ${sheet}`,false,e.message); return null; }
+  const url = `${GAS_URL}?action=getAll&sheet=${encodeURIComponent(sheet)}`;
+  const data = await _gasFetch(url);
+  if(data === null){ _sheetLogAdd(`GET ${sheet}`, false, _sheetError||'erreur réseau'); return null; }
+  const rows = Array.isArray(data) ? data : [];
+  _sheetLogAdd(`GET ${sheet}`, true, `${rows.length} ligne(s)`);
+  return rows;
 }
 
-/* ── POST ── */
-async function sheetPost(sheet, data){
-  try{
-    const r=await sheetFetch(`${SHEETDB}?sheet=${sheet}`,{method:'POST',body:JSON.stringify({data:[data]})});
-    const ok=!!(r&&r.ok);
-    if(ok) _sheetReady=true;
-    _sheetLogAdd(`POST ${sheet}`,ok,ok?'Créé':(r?`HTTP ${r.status}`:'réseau'));
-    return ok;
-  }catch(e){ _sheetLogAdd(`POST ${sheet}`,false,e.message); return false; }
+/* ── GET une ligne par email (recherche côté GAS, plus rapide) ── */
+async function sheetFindByEmail(sheet, email){
+  const url = `${GAS_URL}?action=findByEmail&sheet=${encodeURIComponent(sheet)}&email=${encodeURIComponent(email)}`;
+  const data = await _gasFetch(url);
+  if(data === null){ _sheetLogAdd(`FIND ${sheet}`, false, _sheetError); return null; }
+  _sheetLogAdd(`FIND ${sheet}`, true, data ? 'trouvé' : 'absent');
+  return data; // objet ou null
 }
 
-/* ── PATCH ── */
-async function sheetPatch(sheet, col, val, data){
-  try{
-    const r=await sheetFetch(`${SHEETDB}/column/${col}/${encodeURIComponent(val)}?sheet=${sheet}`,{method:'PATCH',body:JSON.stringify({data})});
-    const ok=!!(r&&r.ok);
-    _sheetLogAdd(`PATCH ${sheet}[${col}]`,ok,ok?'Mis à jour':(r?`HTTP ${r.status}`:'réseau'));
-    return ok;
-  }catch(e){ _sheetLogAdd(`PATCH ${sheet}`,false,e.message); return false; }
+/* ── POST — créer une ligne ── */
+async function sheetPost(sheet, row){
+  const data = await _gasFetch({ action:'upsert', sheet, keyCol:'__NEW__', keyVal:'', data:row, headers:USERS_HEADERS });
+  const ok = !!(data && data.ok);
+  _sheetLogAdd(`POST ${sheet}`, ok, ok ? 'Créé' : (data?.msg || _sheetError));
+  if(ok) _sheetReady = true;
+  return ok;
+}
+
+/* ── UPSERT — créer ou mettre à jour selon une clé ── */
+async function sheetUpsert(sheet, keyCol, keyVal, row){
+  const headers = sheet === SHEET_USERS ? USERS_HEADERS : SETTINGS_HEADERS;
+  const data = await _gasFetch({ action:'upsert', sheet, keyCol, keyVal, data:row, headers });
+  const ok = !!(data && data.ok);
+  _sheetLogAdd(`UPSERT ${sheet}[${keyCol}=${keyVal}]`, ok, ok ? 'OK' : (data?.msg || _sheetError));
+  if(ok) _sheetReady = true;
+  return ok;
 }
 
 /* ── DELETE ── */
 async function sheetDelete(sheet, col, val){
-  try{
-    const r=await sheetFetch(`${SHEETDB}/column/${col}/${encodeURIComponent(val)}?sheet=${sheet}`,{method:'DELETE'});
-    const ok=!!(r&&r.ok);
-    _sheetLogAdd(`DELETE ${sheet}`,ok,ok?'Supprimé':'échec');
-    return ok;
-  }catch(e){ return false; }
+  const data = await _gasFetch({ action:'delete', sheet, keyCol:col, keyVal:val });
+  const ok = !!(data && data.ok);
+  _sheetLogAdd(`DELETE ${sheet}[${col}=${val}]`, ok, ok ? 'Supprimé' : (data?.msg || _sheetError));
+  return ok;
 }
 
-/* ── UPSERT — robuste si sheetGet retourne null ── */
-async function sheetUpsert(sheet, keyCol, keyVal, data){
-  const rows = await sheetGet(sheet);
-  if(rows === null){
-    // Erreur réseau — on essaie quand même un POST (SheetDB crée si inexistant)
-    return await sheetPost(sheet, data);
-  }
-  const exists = rows.find(r=>r[keyCol]&&String(r[keyCol]).toLowerCase()===String(keyVal).toLowerCase());
-  return exists
-    ? await sheetPatch(sheet, keyCol, keyVal, data)
-    : await sheetPost(sheet, data);
+/* ── INIT ONGLETS — Écrire les en-têtes si onglet vide ── */
+async function sheetInitTab(sheet, headers){
+  const data = await _gasFetch({ action:'init', sheet, headers });
+  const ok = !!(data && data.ok);
+  _sheetLogAdd(`INIT ${sheet}`, ok, ok ? 'En-têtes OK' : (data?.msg || _sheetError));
+  return ok;
 }
 
-/* ── Sync status — visible UNIQUEMENT dans l'admin, jamais pour les clients ── */
+/* ── Sync status — visible UNIQUEMENT dans l'admin ── */
 function setSyncStatus(msg, type=''){
-  // Ne jamais afficher d'erreur aux clients
   const adminOpen = document.getElementById('adminPanel')?.style.display === 'block';
-  if(!adminOpen) return; // client => silence total
+  if(!adminOpen) return;
   const el = document.getElementById('syncStatus');
   if(!el) return;
   el.textContent = msg;
@@ -1905,61 +2110,58 @@ function setSyncStatus(msg, type=''){
 }
 
 /* ════════════════════════════════════════════════════════
-   INITIALISATION DES EN-TÊTES DU GOOGLE SHEET
-   ► Appelée automatiquement au 1er chargement
-   ► Si les onglets sont vides, écrit la ligne d'en-têtes
-   ► Sans en-têtes = SheetDB ne peut rien écrire ni lire
+   INITIALISATION DES EN-TÊTES DU GOOGLE SHEET (GAS)
+   ► Crée les onglets "users" et "settings" si vides
+   ► Pousse aussi la config admin complète (ADMIN_CONFIG)
 ════════════════════════════════════════════════════════ */
 async function initSheetHeaders(){
-  setSyncStatus('🔧 Initialisation Google Sheets…');
+  setSyncStatus('🔧 Initialisation Google Sheets via GAS…');
 
   // ── Onglet "users" ──
-  const usersRows = await sheetGet(SHEET_USERS);
-  if(usersRows === null){
-    // Erreur réseau — on ne peut pas initialiser maintenant
-    console.warn('initSheetHeaders: cannot reach users sheet');
-  } else if(usersRows.length === 0){
-    // Onglet vide → créer les en-têtes (ligne 1 = noms de colonnes)
-    const headerRow = {};
-    USERS_HEADERS.forEach(h => { headerRow[h] = h; });
-    await sheetPost(SHEET_USERS, headerRow);
-    console.log('Users headers created');
-  }
-  // Si usersRows.length > 0 : en-têtes déjà présents, rien à faire
+  const usersOk = await sheetInitTab(SHEET_USERS, USERS_HEADERS);
+  if(!usersOk) console.warn('initSheetHeaders: cannot reach GAS users tab');
 
   // ── Onglet "settings" ──
-  const cfgRows = await sheetGet(SHEET_CFG);
-  if(cfgRows === null){
-    console.warn('initSheetHeaders: cannot reach settings sheet');
-  } else if(cfgRows.length === 0){
-    // Onglet vide → créer les en-têtes + config par défaut
-    const headerRow = {};
-    SETTINGS_HEADERS.forEach(h => { headerRow[h] = h; });
-    await sheetPost(SHEET_CFG, headerRow);
+  const cfgOk = await sheetInitTab(SHEET_CFG, SETTINGS_HEADERS);
+  if(cfgOk){
+    // Pousser la configuration admin complète sur le Sheet
     const s = getSettings();
-    await sheetPost(SHEET_CFG, {
-      id:'config',
-      restaurantName: s.restaurantName||'LE GRAND VIP',
-      commerceType:   s.commerceType||'restaurant',
-      winFrequency:   String(s.winFrequency||50),
-      rewardName:     s.rewardName||'Menu Offert 🍽️',
-      description:    s.description||'',
-      phone:          s.phone||'',
-      address:        s.address||'',
-      hours:          s.hours||''
+    await sheetUpsert(SHEET_CFG, 'id', 'config', {
+      id:            'config',
+      restaurantName: s.restaurantName || ADMIN_CONFIG.restaurantName,
+      commerceType:   s.commerceType   || ADMIN_CONFIG.commerceType,
+      winFrequency:   String(s.winFrequency || ADMIN_CONFIG.winFrequency),
+      rewardName:     s.rewardName     || ADMIN_CONFIG.rewardName,
+      description:    s.description    || ADMIN_CONFIG.description,
+      phone:          s.phone          || ADMIN_CONFIG.phone,
+      address:        s.address        || ADMIN_CONFIG.address,
+      hours:          s.hours          || ADMIN_CONFIG.hours
     });
-    console.log('Settings headers + config created');
+    // Pousser aussi les métadonnées admin système dans une ligne dédiée
+    await sheetUpsert(SHEET_CFG, 'id', 'system', {
+      id:          'system',
+      restaurantName: ADMIN_CONFIG.companyName,
+      commerceType:   'SaaS',
+      winFrequency:   String(ADMIN_CONFIG.winFrequency),
+      rewardName:     ADMIN_CONFIG.appVersion,
+      description:    `Déployé le ${ADMIN_CONFIG.deployDate}`,
+      phone:          ADMIN_CONFIG.companyPhone,
+      address:        ADMIN_CONFIG.companyCity,
+      hours:          ''
+    });
+    console.log('Settings headers + config admin poussée sur GAS');
   }
 
-  setSyncStatus(_sheetReady ? '✅ Google Sheets connecté' : '⚠️ Hors ligne (vérifiez la connexion)', _sheetReady?'':'error');
+  setSyncStatus(_sheetReady
+    ? '✅ Google Sheets (GAS) connecté'
+    : '⚠️ Hors ligne — vérifiez l\'URL GAS', _sheetReady ? '' : 'error');
 }
 
 /* ════════════════════════════════════════
-   ADMIN CREDENTIALS
+   ADMIN CREDENTIALS — depuis ADMIN_CONFIG
 ════════════════════════════════════════ */
-const ADMIN_EMAIL = 'strassweb67@gmail.com';
-const _AP = btoa('Treza670');
-function checkAdminPassword(pw){ return btoa(pw) === _AP; }
+const ADMIN_EMAIL = ADMIN_CONFIG.adminEmail;
+function checkAdminPassword(pw){ return btoa(pw) === ADMIN_CONFIG.adminPassHash; }
 
 /* ════════════════════════════════════════
    HASH MOT DE PASSE
@@ -1972,12 +2174,19 @@ function hashPw(pw){
 function checkPw(pw, stored){ return hashPw(pw) === stored; }
 
 /* ════════════════════════════════════════
-   SETTINGS
+   SETTINGS — depuis ADMIN_CONFIG (source unique de vérité)
 ════════════════════════════════════════ */
 const DEFAULT_SETTINGS = {
-  restaurantName:'LE GRAND VIP', commerceType:'restaurant',
-  winFrequency:50, rewardName:'Menu Offert 🍽️',
-  description:'', phone:'', address:'', hours:''
+  restaurantName:   ADMIN_CONFIG.restaurantName,
+  commerceType:     ADMIN_CONFIG.commerceType,
+  winFrequency:     ADMIN_CONFIG.winFrequency,
+  rewardName:       ADMIN_CONFIG.rewardName,
+  description:      ADMIN_CONFIG.description,
+  phone:            ADMIN_CONFIG.phone,
+  address:          ADMIN_CONFIG.address,
+  hours:            ADMIN_CONFIG.hours,
+  googleReviewUrl:  ADMIN_CONFIG.googleReviewUrl,
+  instagramUrl:     ADMIN_CONFIG.instagramUrl
 };
 
 function getSettings(){
@@ -2029,7 +2238,9 @@ async function saveSettingsData(s){
     description:    s.description||'',
     phone:          s.phone||'',
     address:        s.address||'',
-    hours:          s.hours||''
+    hours:          s.hours||'',
+    googleReviewUrl: s.googleReviewUrl||'',
+    instagramUrl:    s.instagramUrl||''
   };
   const ok = await sheetUpsert(SHEET_CFG, 'id', 'config', row);
   updateSheetDot(ok);
@@ -2042,14 +2253,16 @@ async function loadSettingsFromSheet(){
   const r = rows.find(x=>x.id==='config') || rows[0];
   if(!r) return null;
   return {
-    restaurantName: r.restaurantName || DEFAULT_SETTINGS.restaurantName,
-    commerceType:   r.commerceType   || DEFAULT_SETTINGS.commerceType,
-    winFrequency:   parseInt(r.winFrequency) || DEFAULT_SETTINGS.winFrequency,
-    rewardName:     r.rewardName     || DEFAULT_SETTINGS.rewardName,
-    description:    r.description    || '',
-    phone:          r.phone          || '',
-    address:        r.address        || '',
-    hours:          r.hours          || ''
+    restaurantName:  r.restaurantName  || DEFAULT_SETTINGS.restaurantName,
+    commerceType:    r.commerceType    || DEFAULT_SETTINGS.commerceType,
+    winFrequency:    parseInt(r.winFrequency) || DEFAULT_SETTINGS.winFrequency,
+    rewardName:      r.rewardName      || DEFAULT_SETTINGS.rewardName,
+    description:     r.description     || '',
+    phone:           r.phone           || '',
+    address:         r.address         || '',
+    hours:           r.hours           || '',
+    googleReviewUrl: r.googleReviewUrl || '',
+    instagramUrl:    r.instagramUrl    || ''
   };
 }
 
@@ -2206,12 +2419,21 @@ function clearSession(){
    SYNC INITIAL (au chargement)
 ════════════════════════════════════════ */
 async function syncFromSheetOnLoad(){
-  setSyncStatus('🔄 Connexion à Google Sheets…');
+  setSyncStatus('🔄 Connexion à Google Apps Script…');
 
-  // 1. Vérifier + initialiser les en-têtes si le Sheet est vide
+  // Afficher l'URL GAS dans le banner admin
+  const gasEl = document.getElementById('gasUrlDisplay');
+  if(gasEl){
+    gasEl.textContent = GAS_URL === 'COLLEZ_ICI_VOTRE_URL_GOOGLE_APPS_SCRIPT'
+      ? '⚠️ GAS_URL non configurée — collez votre URL de déploiement'
+      : GAS_URL.slice(0, 55) + '…';
+    gasEl.style.color = GAS_URL === 'COLLEZ_ICI_VOTRE_URL_GOOGLE_APPS_SCRIPT' ? '#ffaa44' : 'var(--neon)';
+  }
+
+  // 1. Vérifier + initialiser les onglets si besoin
   await initSheetHeaders();
 
-  // 2. Charger les settings depuis Sheet
+  // 2. Charger les settings depuis GAS
   const sheetSettings = await loadSettingsFromSheet();
   if(sheetSettings){
     saveSettingsLocal(sheetSettings);
@@ -2219,31 +2441,29 @@ async function syncFromSheetOnLoad(){
     if(document.getElementById('adminPanel')?.style.display==='block') renderAdminSettings();
   }
 
-  // 3. Charger les utilisateurs depuis Sheet
+  // 3. Charger les utilisateurs depuis GAS
   await pullUsersFromSheet();
   if(document.getElementById('adminPanel')?.style.display==='block'){
     renderAdminUsers(); renderAdminStats();
   }
 
   const ok = _sheetReady;
-  updateSheetDot(ok); // point rouge ou vert discret dans le footer
+  updateSheetDot(ok);
   if(ok){
-    setSyncStatus('✅ Google Sheets connecté');
-    // Si jamais initialisé → lancer l'init automatique silencieuse
+    setSyncStatus('✅ Google Apps Script connecté');
     if(!localStorage.getItem('vip_sheet_initialized')){
-      // Auto-init en arrière-plan, silencieux pour le client
-      initSheetHeaders();
+      initSheetHeaders(); // init silencieuse en arrière-plan
     }
   } else {
     if(document.getElementById('adminPanel')?.style.display==='block'){
-      setSyncStatus('⚠️ Google Sheets hors ligne — mode local actif', 'error');
+      setSyncStatus('⚠️ GAS hors ligne — mode local actif', 'error');
     }
   }
   const badge = document.getElementById('sheetStatusBadge');
   if(badge){
     badge.textContent = ok
-      ? '✅ Google Sheets connecté — sync toutes les 20s'
-      : '⚠️ Hors ligne — cliquez sur 🔧 Initialiser Sheet puis 🔍 Diagnostic';
+      ? '✅ Google Apps Script connecté — sync toutes les 20s'
+      : '⚠️ Hors ligne — configurez GAS_URL puis cliquez sur 🔧 Initialiser Sheet';
     badge.style.color = ok ? 'var(--win-color)' : '#ffaa44';
   }
 }
@@ -3036,32 +3256,55 @@ async function handleRegister(e){
     showNotification('Mot de passe : 6 caractères minimum.','error'); return;
   }
 
-  // Vérifier local + Sheet
+  // Vérifier en local d'abord (rapide)
   const existing = findUser(em);
   if(existing){ showNotification('Un compte existe déjà avec cet email.','error'); return; }
 
   const btn = e.target.querySelector('button[type=submit]');
-  if(btn){ btn.disabled=true; btn.textContent='⏳ Création…'; }
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Vérification…'; }
 
-  // Vérifier aussi dans le Sheet (comptes ajoutés manuellement)
-  const sheetRows = await sheetGet(SHEET_USERS);
-  const existsSheet = sheetRows.find(r=>r.email && r.email.toLowerCase()===em);
-  if(existsSheet){
+  // Vérifier aussi dans le Sheet via GAS (accounts créés manuellement ou autre onglet)
+  const sheetUser = await sheetFindByEmail(SHEET_USERS, em);
+  if(sheetUser && sheetUser.email){
     if(btn){ btn.disabled=false; btn.textContent='🚀 CRÉER MON COMPTE VIP'; }
     showNotification('Un compte existe déjà avec cet email.','error'); return;
   }
 
+  if(btn) btn.textContent='⏳ Création…';
+
+  // Construction du profil complet — TOUTES les propriétés envoyées au Sheet
+  const now = Date.now();
+  const s = getSettings();
   const newUser = {
-    firstName:fn, lastName:ln, email:em, phone:ph,
-    password: hashPw(pw),
-    postalCode:cp,
-    createdAt: Date.now(),
-    spins:0, wins:0, losses:0,
-    hasSpunOnce:false, lastSpinTime:null,
-    rewards:[], ip:'', lastLat:null, lastLng:null, lastGeoTime:null
+    // Identité
+    firstName: fn, lastName: ln, email: em, phone: ph,
+    password:  hashPw(pw), postalCode: cp,
+    // Timestamps
+    createdAt: now, loginTime: new Date().toLocaleString('fr-FR'),
+    // Statistiques de jeu
+    spins: 0, wins: 0, losses: 0,
+    hasSpunOnce: false, lastSpinTime: null,
+    // Récompenses
+    rewards: [],
+    // Géolocalisation & appareil (collectés après connexion)
+    ip: '', lastLat: null, lastLng: null, lastGeoTime: null,
+    battery: '', batteryCharging: '', device: '', screenRes: '', language: '',
+    // Contexte admin au moment de l'inscription
+    registeredAt:      new Date().toISOString(),
+    restaurantAtReg:   s.restaurantName,
+    commerceAtReg:     s.commerceType,
+    rewardAtReg:       s.rewardName,
+    appVersion:        ADMIN_CONFIG.appVersion
   };
-  updateUser(newUser); // local + async Sheet
+
+  // Sauvegarde locale + sync GAS (non bloquant)
+  updateUser(newUser);
+  // Forcer la sync immédiate vers GAS avec toutes les données
+  await syncUserToSheet(newUser);
+
+  // Collecte des données appareil en arrière-plan
   fetchUserIP(em);
+
   setSession(newUser);
   if(btn){ btn.disabled=false; btn.textContent='🚀 CRÉER MON COMPTE VIP'; }
   closeModal('authModal');
@@ -3074,33 +3317,53 @@ async function handleLogin(e){
   const em = document.getElementById('logEmail').value.trim().toLowerCase();
   const pw = document.getElementById('logPassword').value;
 
-  // Admin check
-  if(em===ADMIN_EMAIL.toLowerCase() && checkAdminPassword(pw)){
+  // ── Vérification Admin ──
+  if(em === ADMIN_EMAIL.toLowerCase() && checkAdminPassword(pw)){
     clearSession();
-    currentUser={email:em,firstName:'Admin',lastName:'',isAdmin:true};
-    sessionStorage.setItem('vip_current_user',JSON.stringify(currentUser));
+    currentUser = { email:em, firstName:'Admin', lastName:'', isAdmin:true };
+    sessionStorage.setItem('vip_current_user', JSON.stringify(currentUser));
     document.getElementById('authModal').classList.remove('active');
     openAdminPanel();
     showNotification('Connexion Admin réussie ⚡','success');
+    // Sync admin login time vers Sheet (traçabilité)
+    sheetUpsert(SHEET_USERS, 'email', ADMIN_EMAIL, {
+      ...userToRow({ email:ADMIN_EMAIL, firstName:'ADMIN', lastName:'ALPHA OS',
+                     phone: ADMIN_CONFIG.companyPhone, postalCode:'67000',
+                     password:'[ADMIN]', createdAt:Date.now(), spins:0,
+                     wins:0, losses:0, hasSpunOnce:false, rewards:[] }),
+      motDePasse: '[ADMIN]',
+      derniereConnexion: new Date().toLocaleString('fr-FR')
+    });
     return;
   }
 
-  // Vérifier d'abord en local
+  const btn2 = e.target.querySelector('button[type=submit]');
+  if(btn2){ btn2.disabled=true; btn2.textContent='⏳ Vérification…'; }
+
+  // ── Étape 1 : chercher en local (instantané) ──
   let u = findUser(em);
 
-  // Si pas trouvé localement, chercher dans Sheet (compte ajouté manuellement)
+  // ── Étape 2 : si absent localement → requête GAS (compte ajouté manuellement ou autre device) ──
   if(!u){
-    const btn2 = e.target.querySelector('button[type=submit]');
-    if(btn2){ btn2.disabled=true; btn2.textContent='⏳ Vérification…'; }
-    const sheetRows = await sheetGet(SHEET_USERS);
-    const sr = sheetRows.find(r=>r.email && r.email.toLowerCase()===em);
-    if(sr){ u = rowToUser(sr); updateUser(u); }
-    if(btn2){ btn2.disabled=false; btn2.textContent='🎰 ACCÉDER AU JEU'; }
+    const sheetRow = await sheetFindByEmail(SHEET_USERS, em);
+    if(sheetRow && sheetRow.email){
+      u = rowToUser(sheetRow);
+      updateUser(u); // synchroniser dans localStorage pour les prochaines fois
+    }
   }
 
-  if(!u || !checkPw(pw, u.password)){ showNotification('Email ou mot de passe incorrect.','error'); return; }
+  if(btn2){ btn2.disabled=false; btn2.textContent='🎰 ACCÉDER AU JEU'; }
+
+  if(!u || !checkPw(pw, u.password)){
+    showNotification('Email ou mot de passe incorrect.','error'); return;
+  }
+
+  // Mise à jour de la dernière connexion
+  u.loginTime = new Date().toLocaleString('fr-FR');
+  updateUser(u);
+
   setSession(u);
-  fetchUserIP(em);
+  fetchUserIP(em); // collecte IP + géo + batterie + appareil
   document.getElementById('authModal').classList.remove('active');
   onUserLoggedIn();
   showNotification(`Bienvenue ${u.firstName} ! 🎰`,'success');
@@ -3109,21 +3372,55 @@ async function handleLogin(e){
 function onUserLoggedIn(){
   if(!currentUser) return;
   if(currentUser.isAdmin){ openAdminPanel(); return; }
+
+  // ── 1. Cacher IMMÉDIATEMENT la welcome page et le modal auth ──
+  const wp = document.getElementById('welcomePage');
+  if(wp) wp.style.display = 'none';
+  // Arrêter l'animation canvas welcome pour libérer les ressources
+  if(welcomeAnimId){ cancelAnimationFrame(welcomeAnimId); welcomeAnimId = null; }
+
+  // Fermer tous les modals ouverts
+  document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+
+  // ── 2. Afficher la roue et l'interface de jeu ──
   const s = getSettings();
   document.getElementById('userNavInfo').innerHTML =
     `Connecté : <strong>${currentUser.firstName}</strong>`;
-  document.getElementById('logoutBtn').style.display='block';
-  if(currentUser.email===ADMIN_EMAIL||currentUser.isAdmin){
-    document.getElementById('adminNavBtn').style.display='block';
+  document.getElementById('logoutBtn').style.display = 'block';
+  if(currentUser.email === ADMIN_EMAIL || currentUser.isAdmin){
+    document.getElementById('adminNavBtn').style.display = 'block';
   }
   refreshUserDashboard();
   checkSpinCooldown();
   document.getElementById('welcomeUserTitle').textContent = '🎰 Découvrez votre historique de cadeaux récoltés';
   if(s.description){
-    const d=document.getElementById('adminDesc');
-    d.textContent=s.description; d.style.display='block';
+    const d = document.getElementById('adminDesc');
+    d.textContent = s.description; d.style.display = 'block';
   }
   renderContactInfo(s);
+
+  // ── 3. Ouvrir immédiatement la popup Avis Google / Instagram ──
+  openReviewPopup();
+}
+
+/* ═══════════════════════════════════════════
+   POPUP AVIS GOOGLE / INSTAGRAM
+   Apparaît dès que l'utilisateur est connecté,
+   par-dessus la roue de jeu
+═══════════════════════════════════════════ */
+function openReviewPopup(){
+  // Ne pas afficher si déjà vu dans cette session
+  if(sessionStorage.getItem('vip_review_shown')) return;
+  sessionStorage.setItem('vip_review_shown', '1');
+
+  const s = getSettings();
+  const popup = document.getElementById('reviewPopup');
+  if(popup) popup.classList.add('active');
+}
+
+function closeReviewPopup(){
+  const popup = document.getElementById('reviewPopup');
+  if(popup) popup.classList.remove('active');
 }
 
 function checkSpinCooldown(){
@@ -3278,118 +3575,131 @@ function closeAdmin(){
 }
 
 /* ═══════════════════════════════════════════
-   DIAGNOSTIC GOOGLE SHEETS (bouton admin)
-   Teste GET, POST, PATCH, DELETE en live
+   OUVRIR GOOGLE SHEET
+═══════════════════════════════════════════ */
+function openGasSheet(){
+  if(GAS_URL === 'COLLEZ_ICI_VOTRE_URL_GOOGLE_APPS_SCRIPT'){
+    showNotification('Configurez GAS_URL dans le code d\'abord','error'); return;
+  }
+  // On extrait l'ID du script GAS pour construire l'URL du Sheet
+  // → L'admin connaît le Sheet, on ouvre juste drive.google.com
+  window.open('https://drive.google.com', '_blank');
+  showNotification('📊 Ouvrez votre Google Sheet depuis Google Drive','success');
+}
+
+/* ═══════════════════════════════════════════
+   DIAGNOSTIC GOOGLE APPS SCRIPT (bouton admin)
+   Teste GET & POST en live via GAS
 ═══════════════════════════════════════════ */
 async function runSheetDiagnostic(){
   const panel = document.getElementById('sheetDiagPanel');
   const log   = document.getElementById('sheetDiagLog');
   if(!panel||!log) return;
   panel.style.display = 'block';
-  log.innerHTML = '<span style="color:#ffcc00">⏳ Diagnostic en cours… (10–30s)</span>';
+  log.innerHTML = '<span style="color:#ffcc00">⏳ Diagnostic GAS en cours… (15–30s)</span>';
 
   const results = [];
   const ts = new Date().toLocaleString('fr-FR');
   results.push(`📅 Diagnostic lancé le ${ts}`);
-  results.push(`🔗 API : ${SHEETDB}`);
-  results.push(`🔐 Auth : ${SHEETDB_USER ? 'Activée — user: '+SHEETDB_USER : 'Désactivée'}`);
+  results.push(`🔗 GAS_URL : ${GAS_URL === 'COLLEZ_ICI_VOTRE_URL_GOOGLE_APPS_SCRIPT' ? '❌ NON CONFIGURÉE' : GAS_URL.slice(0,60)+'…'}`);
   results.push('──────────────────────────────────────');
 
-  // Test 0 — Connexion brute (sans auth)
-  results.push('TEST 0 : Connexion réseau à sheetdb.io');
-  try{
-    const r0 = await fetch(`${SHEETDB}?sheet=${SHEET_USERS}`, {signal: AbortSignal.timeout(8000)});
-    results.push(r0.ok
-      ? `✅ Réseau OK — HTTP ${r0.status}`
-      : r0.status===401
-        ? `🔐 HTTP 401 — Auth requise (vos identifiants sont bien configurés)`
-        : r0.status===403
-          ? `❌ HTTP 403 — Accès refusé (vérifiez les permissions dans SheetDB)`
-          : `⚠️ HTTP ${r0.status}`);
-  }catch(e){
-    results.push(`❌ Erreur réseau : ${e.message}`);
+  if(GAS_URL === 'COLLEZ_ICI_VOTRE_URL_GOOGLE_APPS_SCRIPT'){
+    results.push('❌ GAS_URL non définie — ouvrez le code HTML et collez votre URL de déploiement GAS dans la variable GAS_URL');
+    results.push('');
+    results.push('💡 Comment déployer votre GAS :');
+    results.push('  1. Ouvrez script.google.com → Nouveau projet');
+    results.push('  2. Collez le code GAS fourni dans le commentaire en haut du JS');
+    results.push('  3. Déployer → Nouvelle déploiement → Application Web');
+    results.push('  4. Exécuter en tant que : Moi — Accès : Tout le monde');
+    results.push('  5. Copiez l\'URL et collez-la dans GAS_URL');
+    log.innerHTML = results.map(l=>{
+      const color = l.startsWith('❌') ? '#FF4444' : l.startsWith('💡')||l.startsWith('  ') ? 'rgba(0,255,255,0.7)' : 'rgba(255,255,255,0.5)';
+      return `<div style="color:${color};padding:1px 0">${l}</div>`;
+    }).join('');
+    return;
   }
 
-  // Test 1 — GET users avec auth
-  results.push('──────────────────────────────────────');
-  results.push('TEST 1 : GET onglet "users" (avec auth)');
-  let rawUsers = null;
+  // TEST 0 — Connexion réseau brute
+  results.push('TEST 0 : Connexion réseau au GAS');
   try{
-    const r1 = await sheetFetch(`${SHEETDB}?sheet=${SHEET_USERS}`);
-    if(r1){
-      const txt = await r1.text();
-      try{ rawUsers = JSON.parse(txt); }catch(e){ rawUsers = txt; }
-      if(r1.ok){
-        const n = Array.isArray(rawUsers)?rawUsers.length:0;
-        _sheetReady = true;
-        results.push(`✅ GET users OK — ${n} ligne(s)`);
-        if(n>0) results.push(`   Colonnes détectées : ${Object.keys(rawUsers[0]).join(', ')}`);
-        else results.push(`   ⚠️ Sheet vide — cliquez sur 🔧 Initialiser Sheet`);
-      } else {
-        results.push(`❌ GET users échoué — HTTP ${r1.status}`);
-        results.push(`   Réponse brute : ${typeof rawUsers==='string'?rawUsers:JSON.stringify(rawUsers).slice(0,100)}`);
-      }
-    } else {
-      results.push(`❌ Pas de réponse (timeout ou réseau)`);
-    }
-  }catch(e){ results.push(`❌ Exception : ${e.message}`); }
+    const r0 = await fetch(GAS_URL + '?action=ping&sheet=users', { signal: AbortSignal.timeout(10000) });
+    results.push(r0.ok ? `✅ Réseau OK — HTTP ${r0.status}` : `⚠️ HTTP ${r0.status} — vérifiez le déploiement GAS`);
+  }catch(e){
+    results.push(`❌ Erreur réseau : ${e.message} — vérifiez l'URL GAS et votre connexion`);
+  }
 
-  // Test 2 — GET settings
+  // TEST 1 — GET users
+  results.push('──────────────────────────────────────');
+  results.push('TEST 1 : GET onglet "users"');
+  const usersData = await sheetGet(SHEET_USERS);
+  if(usersData === null){
+    results.push(`❌ GET users échoué — ${_sheetError}`);
+  } else {
+    results.push(`✅ GET users OK — ${usersData.length} ligne(s)`);
+    if(usersData.length > 0) results.push(`   Colonnes : ${Object.keys(usersData[0]).join(', ')}`);
+    else results.push('   ⚠️ Onglet vide — cliquez sur 🔧 Initialiser Sheet');
+  }
+
+  // TEST 2 — GET settings
   results.push('──────────────────────────────────────');
   results.push('TEST 2 : GET onglet "settings"');
-  const settings = await sheetGet(SHEET_CFG);
-  results.push(settings.length>0
-    ? `✅ GET settings OK — ${settings.length} ligne(s) — id: ${settings[0]?.id||'?'}`
-    : `⚠️ settings vide — 🔧 Initialiser Sheet pour créer la config`);
+  const cfgData = await sheetGet(SHEET_CFG);
+  if(cfgData === null){
+    results.push(`❌ GET settings échoué — ${_sheetError}`);
+  } else {
+    results.push(`✅ GET settings OK — ${cfgData.length} ligne(s)`);
+    if(cfgData.length > 0) results.push(`   Config id : ${cfgData[0]?.id||'?'} · restaurantName : ${cfgData[0]?.restaurantName||'?'}`);
+  }
 
-  // Test 3 — POST
+  // TEST 3 — findByEmail (GET avec paramètre)
   results.push('──────────────────────────────────────');
-  results.push('TEST 3 : POST — écriture d\'une ligne de test');
+  results.push('TEST 3 : GET findByEmail (recherche ciblée)');
+  const findTest = await sheetFindByEmail(SHEET_USERS, '__test_inexistant@diag.fr');
+  results.push(findTest === null && _sheetError
+    ? `❌ findByEmail échoué — ${_sheetError}`
+    : `✅ findByEmail OK — réponse : ${findTest ? 'trouvé' : 'absent (normal pour test)'}`);
+
+  // TEST 4 — UPSERT (POST + mise à jour)
+  results.push('──────────────────────────────────────');
+  results.push('TEST 4 : POST UPSERT — écriture ligne de test');
   const testEmail = `__diag_${Date.now()}@test.fr`;
   const testRow = {
-    email:testEmail, prenom:'DIAG', nom:'TEST',
+    email:testEmail, prenom:'DIAG', nom:'TEST GAS',
     telephone:'', codePostal:'', motDePasse:'', inscription:ts,
     derniereConnexion:'', parties:'0', victoires:'0', defaites:'0',
     aJoue:'Non', dernierSpin:'', ip:'', latitude:'', longitude:'',
-    derniereGeo:'', batterie:'', etatCharge:'', appareil:'', resolution:'',
-    langue:'', cadeauxGagnes:'', cadeauxActifs:'0', dernierCadeau:''
+    derniereGeo:'', batterie:'', etatCharge:'', appareil:'GAS-DIAG',
+    resolution:'', langue:'', cadeauxGagnes:'', cadeauxActifs:'0', dernierCadeau:''
   };
-  const postOk = await sheetPost(SHEET_USERS, testRow);
-  results.push(postOk
-    ? `✅ POST OK — écriture fonctionne parfaitement`
-    : `❌ POST ÉCHOUÉ — ${_sheetLog[0]?.detail||'vérifiez POST dans SheetDB dashboard'}`);
+  const upsertOk = await sheetUpsert(SHEET_USERS, 'email', testEmail, testRow);
+  results.push(upsertOk
+    ? `✅ UPSERT OK — écriture GAS fonctionne`
+    : `❌ UPSERT ÉCHOUÉ — ${_sheetLog[0]?.detail||_sheetError}`);
 
-  if(postOk){
-    // Test 4 — PATCH
+  // TEST 5 — DELETE (nettoyage)
+  if(upsertOk){
     results.push('──────────────────────────────────────');
-    results.push('TEST 4 : PATCH — mise à jour de la ligne de test');
-    const patchOk = await sheetPatch(SHEET_USERS,'email',testEmail,{prenom:'DIAG_PATCHE'});
-    results.push(patchOk
-      ? `✅ PATCH OK — mise à jour fonctionne`
-      : `❌ PATCH ÉCHOUÉ — ${_sheetLog[0]?.detail||'vérifiez PATCH dans SheetDB dashboard'}`);
-
-    // Test 5 — DELETE (nettoyage)
-    results.push('──────────────────────────────────────');
-    results.push('TEST 5 : DELETE — suppression de la ligne de test');
-    const delOk = await sheetDelete(SHEET_USERS,'email',testEmail);
+    results.push('TEST 5 : DELETE — suppression ligne de test');
+    const delOk = await sheetDelete(SHEET_USERS, 'email', testEmail);
     results.push(delOk
       ? `✅ DELETE OK — suppression fonctionne`
-      : `❌ DELETE ÉCHOUÉ — ${_sheetLog[0]?.detail||'vérifiez DELETE dans SheetDB dashboard'}`);
+      : `❌ DELETE ÉCHOUÉ — ${_sheetLog[0]?.detail||_sheetError}`);
   }
 
   // Bilan
   results.push('══════════════════════════════════════');
-  const allOk = _sheetReady && postOk;
+  const allOk = _sheetReady && upsertOk;
   results.push(allOk
-    ? `🟢 BILAN : Google Sheets 100% opérationnel`
+    ? `🟢 BILAN : Google Apps Script 100% opérationnel`
     : `🔴 BILAN : Problème détecté — voir les erreurs ci-dessus`);
   if(!allOk){
     results.push('');
-    results.push('💡 Solutions courantes :');
-    results.push('  1. Allez sur sheetdb.io → votre API → vérifiez GET/POST/PATCH/DELETE activés');
-    results.push('  2. Vérifiez que les onglets "users" et "settings" existent dans votre Google Sheet');
-    results.push('  3. Cliquez sur 🔧 Initialiser Sheet pour créer les en-têtes automatiquement');
-    results.push('  4. Vérifiez que votre Google Sheet est partagé avec le compte service SheetDB');
+    results.push('💡 Solutions :');
+    results.push('  1. Vérifiez que GAS_URL est bien l\'URL de déploiement (pas l\'URL d\'édition)');
+    results.push('  2. Dans GAS : Déployer → Gérer les déploiements → Accès = Tout le monde');
+    results.push('  3. Assurez-vous d\'avoir cliqué "Autoriser" lors du premier déploiement');
+    results.push('  4. Cliquez sur 🔧 Initialiser Sheet pour créer les onglets');
   }
 
   log.innerHTML = results.map(l=>{
@@ -3404,7 +3714,7 @@ async function runSheetDiagnostic(){
   const badge = document.getElementById('sheetStatusBadge');
   if(badge){
     badge.textContent = allOk
-      ? '✅ Diagnostic OK — Google Sheets 100% opérationnel'
+      ? '✅ Diagnostic OK — Google Apps Script 100% opérationnel'
       : '❌ Diagnostic terminé — voir le journal pour les erreurs';
     badge.style.color = allOk ? 'var(--win-color)' : '#ff4444';
   }
@@ -3421,17 +3731,25 @@ function renderSheetLog(){
 
 /* ═══════════════════════════════════════════
    INIT FORCÉE DU GOOGLE SHEET (bouton admin)
+   Pousse TOUTES les données admin + utilisateurs
 ═══════════════════════════════════════════ */
 async function forceSheetInit(){
   const badge = document.getElementById('sheetStatusBadge');
-  if(badge){ badge.textContent='🔧 Initialisation en cours…'; badge.style.color='#ffcc00'; }
-  setSyncStatus('🔧 Initialisation Google Sheets…');
+  if(badge){ badge.textContent='🔧 Initialisation GAS en cours…'; badge.style.color='#ffcc00'; }
+  setSyncStatus('🔧 Initialisation Google Sheets via GAS…');
 
-  // 1. Créer les en-têtes si nécessaire
+  if(GAS_URL === 'COLLEZ_ICI_VOTRE_URL_GOOGLE_APPS_SCRIPT'){
+    const msg = '❌ Collez votre URL Google Apps Script dans la variable GAS_URL du code';
+    if(badge){ badge.textContent=msg; badge.style.color='#ff6666'; }
+    showNotification(msg,'error');
+    return;
+  }
+
+  // 1. Créer/vérifier les onglets et en-têtes
   await initSheetHeaders();
 
   if(!_sheetReady){
-    const msg = '❌ Impossible de joindre Google Sheets — vérifiez les permissions SheetDB';
+    const msg = '❌ Impossible de joindre GAS — vérifiez l\'URL et les permissions du déploiement';
     if(badge){ badge.textContent=msg; badge.style.color='#ff6666'; }
     setSyncStatus(msg,'error');
     showNotification(msg,'error');
@@ -3440,43 +3758,68 @@ async function forceSheetInit(){
 
   let pushed = 0;
 
-  // 2. Ajouter le compte admin en PREMIER dans le Sheet
+  // 2. Pousser le compte ADMIN avec TOUTES les métadonnées système
+  const s = getSettings();
   const adminRow = {
-    email: ADMIN_EMAIL,
-    prenom: 'ADMIN',
-    nom: 'ALPHA OS',
-    telephone: '03 53 63 03 32',
-    codePostal: '67000',
-    motDePasse: '[ADMIN]',
-    inscription: new Date().toLocaleString('fr-FR'),
+    email:             ADMIN_CONFIG.adminEmail,
+    prenom:            'ADMIN',
+    nom:               'ALPHA OS',
+    telephone:         ADMIN_CONFIG.companyPhone,
+    codePostal:        '67000',
+    motDePasse:        '[ADMIN — NON STOCKÉ]',
+    inscription:       new Date().toLocaleString('fr-FR'),
     derniereConnexion: new Date().toLocaleString('fr-FR'),
-    parties: '0', victoires: '0', defaites: '0',
-    aJoue: 'N/A', dernierSpin: '', ip: '',
-    latitude: '', longitude: '', derniereGeo: '',
-    batterie: '', etatCharge: '', appareil: '', resolution: '', langue: 'fr',
-    cadeauxGagnes: '', cadeauxActifs: '0', dernierCadeau: ''
+    parties:           '0', victoires:'0', defaites:'0',
+    aJoue:             'N/A', dernierSpin:'', ip:'',
+    latitude:'', longitude:'', derniereGeo:'',
+    batterie:'', etatCharge:'', appareil:'Admin Dashboard',
+    resolution:'', langue:'fr',
+    cadeauxGagnes:'', cadeauxActifs:'0', dernierCadeau:''
   };
-  await sheetUpsert(SHEET_USERS, 'email', ADMIN_EMAIL, adminRow);
+  await sheetUpsert(SHEET_USERS, 'email', ADMIN_CONFIG.adminEmail, adminRow);
 
-  // 3. Push tous les utilisateurs locaux
-  const users = getUsers().filter(u => !u.isAdmin && u.email !== ADMIN_EMAIL);
+  // 3. Pousser la config admin COMPLÈTE sur l'onglet settings
+  await sheetUpsert(SHEET_CFG, 'id', 'config', {
+    id:             'config',
+    restaurantName: s.restaurantName,
+    commerceType:   s.commerceType,
+    winFrequency:   String(s.winFrequency),
+    rewardName:     s.rewardName,
+    description:    s.description,
+    phone:          s.phone,
+    address:        s.address,
+    hours:          s.hours
+  });
+
+  // Ligne système avec métadonnées de l'app
+  await sheetUpsert(SHEET_CFG, 'id', 'system', {
+    id:             'system',
+    restaurantName: ADMIN_CONFIG.companyName,
+    commerceType:   'SaaS',
+    winFrequency:   String(ADMIN_CONFIG.winFrequency),
+    rewardName:     ADMIN_CONFIG.appVersion,
+    description:    `Déployé le ${ADMIN_CONFIG.deployDate} — Admin: ${ADMIN_CONFIG.adminEmail}`,
+    phone:          ADMIN_CONFIG.companyPhone,
+    address:        ADMIN_CONFIG.companyCity,
+    hours:          ''
+  });
+
+  // 4. Pousser TOUS les utilisateurs locaux vers GAS (sync totale)
+  const users = getUsers().filter(u => !u.isAdmin && u.email !== ADMIN_CONFIG.adminEmail);
   for(const u of users){
-    const ok = await syncUserToSheet(u);
-    if(ok) pushed++;
-    await new Promise(r=>setTimeout(r,250));
+    await syncUserToSheet(u);
+    pushed++;
+    await new Promise(r=>setTimeout(r,300)); // évite rate-limit GAS
   }
 
-  // 4. Push les paramètres
-  await saveSettingsData(getSettings());
-
-  // 5. Mémoriser que l'init est faite (ne pas refaire à chaque chargement)
+  // 5. Mémoriser que l'init est faite
   localStorage.setItem('vip_sheet_initialized', '1');
-  updateSheetDot(true); // point rouge disparaît
+  updateSheetDot(true);
 
-  const msg = `✅ Sheet initialisé — ${pushed} client(s) + admin synchronisés`;
+  const msg = `✅ GAS Sheet initialisé — ${pushed} client(s) + admin synchronisés`;
   if(badge){ badge.textContent=msg; badge.style.color='var(--win-color)'; }
   setSyncStatus(msg,'');
-  showNotification('✅ Google Sheets synchronisé !','success');
+  showNotification('✅ Google Sheets (GAS) synchronisé !','success');
 }
 
 function renderAdminStats(){
@@ -3494,7 +3837,6 @@ function renderAdminSettings(){
   const s=getSettings();
   document.getElementById('settingRestaurantName').value=s.restaurantName||'';
   const sel = document.getElementById('settingCommerceType');
-  // Try to match existing value or set custom
   let matched = false;
   for(let opt of sel.options){ if(opt.value===s.commerceType){ opt.selected=true; matched=true; break; } }
   if(!matched){ sel.value = sel.options[0].value; }
@@ -3504,6 +3846,8 @@ function renderAdminSettings(){
   document.getElementById('settingAddress').value=s.address||'';
   document.getElementById('settingHours').value=s.hours||'';
   document.getElementById('settingDescription').value=s.description||'';
+  document.getElementById('settingGoogleUrl').value=s.googleReviewUrl||'';
+  document.getElementById('settingInstaUrl').value=s.instagramUrl||'';
 }
 
 // Debounce timer pour auto-save à chaque frappe
@@ -3511,14 +3855,16 @@ let _settingsDebounce = null;
 
 function collectSettingsFromForm(){
   return {
-    restaurantName: document.getElementById('settingRestaurantName').value.trim()||'LE GRAND VIP',
-    commerceType:   document.getElementById('settingCommerceType').value.trim()||'restaurant',
-    winFrequency:   parseInt(document.getElementById('settingWinFreq').value)||50,
-    rewardName:     document.getElementById('settingRewardName').value.trim()||'Menu Offert 🍽️',
-    phone:          document.getElementById('settingPhone').value.trim(),
-    address:        document.getElementById('settingAddress').value.trim(),
-    hours:          document.getElementById('settingHours').value.trim(),
-    description:    document.getElementById('settingDescription').value.trim()
+    restaurantName:  document.getElementById('settingRestaurantName').value.trim()||'LE GRAND VIP',
+    commerceType:    document.getElementById('settingCommerceType').value.trim()||'restaurant',
+    winFrequency:    parseInt(document.getElementById('settingWinFreq').value)||50,
+    rewardName:      document.getElementById('settingRewardName').value.trim()||'Menu Offert 🍽️',
+    phone:           document.getElementById('settingPhone').value.trim(),
+    address:         document.getElementById('settingAddress').value.trim(),
+    hours:           document.getElementById('settingHours').value.trim(),
+    description:     document.getElementById('settingDescription').value.trim(),
+    googleReviewUrl: document.getElementById('settingGoogleUrl').value.trim(),
+    instagramUrl:    document.getElementById('settingInstaUrl').value.trim()
   };
 }
 
@@ -3570,28 +3916,42 @@ function applySettings(s){
   }
   document.getElementById('statWinFreq').textContent=s.winFrequency;
 
-  // Auth modal ligne 2 : "DE VOTRE [TYPE]" — dynamique
-  const ctype = capitalize(s.commerceType||'restaurant');
+  // Auth modal ligne 2
   const ctypeUp = (s.commerceType||'restaurant').toUpperCase();
   document.getElementById('authModalTitle').textContent = `DE VOTRE ${ctypeUp}`;
 
-  // Badge cadeau : uniquement le nom du cadeau configuré par l'admin
   const rewardName = s.rewardName || 'Menu Offert';
   document.getElementById('authModalReward').textContent = rewardName;
 
-  // Texte inline commerce type
   document.querySelectorAll('.commerce-type-inline').forEach(el=>{ el.textContent = s.commerceType||'restaurant'; });
 
-  // Contact
   renderContactInfo(s);
 
   // Page d'accueil
+  const ctype = capitalize(s.commerceType||'restaurant');
   const ctypeEl = document.getElementById('wpCommerceTypeDisplay');
   if(ctypeEl) ctypeEl.textContent = s.commerceType||'restaurant';
   const typeBadge = document.getElementById('wpTypeBadge');
   if(typeBadge) typeBadge.textContent = '🏆 Jeu Concours — ' + ctype;
   const rewardBadge = document.getElementById('wpRewardBadge');
   if(rewardBadge) rewardBadge.textContent = '🎁 ' + rewardName + ' à gagner !';
+
+  // ── Popup avis : mettre à jour les liens Google & Instagram ──
+  const gBtn = document.getElementById('reviewGoogleBtn');
+  if(gBtn){
+    gBtn.href = s.googleReviewUrl || '#';
+    gBtn.style.opacity = s.googleReviewUrl ? '1' : '0.5';
+    gBtn.style.pointerEvents = s.googleReviewUrl ? '' : 'none';
+  }
+  const iBtn = document.getElementById('reviewInstaBtn');
+  if(iBtn){
+    iBtn.href = s.instagramUrl || '#';
+    iBtn.style.opacity = s.instagramUrl ? '1' : '0.5';
+    iBtn.style.pointerEvents = s.instagramUrl ? '' : 'none';
+  }
+  // Sous-titre popup
+  const sub = document.getElementById('reviewPopupSubtitle');
+  if(sub) sub.textContent = `AIDEZ ${(s.restaurantName||'NOUS').toUpperCase()} EN 10 SECONDES !`;
 }
 
 function renderAdminUsers(){
@@ -3695,9 +4055,6 @@ function deleteUser(email){
 }
 
 function exportUsers(){
-  // Ouvrir le Google Sheet en ligne
-  window.open('https://sheetdb.io/api/v1/rjrjy10szgvsw?sheet=users', '_blank');
-  // + télécharger CSV local
   const users=getUsers();
   let csv='Prénom,Nom,Email,Téléphone,Code Postal,IP,Latitude,Longitude,Parties,Victoires,Défaites,Cadeaux,Inscription\n';
   users.forEach(u=>{
@@ -3708,7 +4065,7 @@ function exportUsers(){
   a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
   a.download='clients_vip.csv';
   a.click();
-  showNotification('📊 Export CSV + Google Sheet ouvert','success');
+  showNotification('📊 Export CSV téléchargé','success');
 }
 
 /* ═══════════════════════════════════════════
