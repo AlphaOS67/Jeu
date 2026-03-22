@@ -1707,11 +1707,11 @@
     <div class="settings-grid">
       <div class="setting-item">
         <label>Nom du Restaurant / Commerce</label>
-        <input type="text" id="settingRestaurantName" placeholder="LE GRAND VIP"/>
+        <input type="text" id="settingRestaurantName" oninput="onSettingChange()" placeholder="LE GRAND VIP"/>
       </div>
       <div class="setting-item">
         <label>Type d'établissement</label>
-        <select id="settingCommerceType">
+        <select id="settingCommerceType" onchange="onSettingChange()">
           <option value="restaurant">Restaurant</option>
           <option value="commerçant">Commerçant</option>
           <option value="boulangerie">Boulangerie</option>
@@ -1722,27 +1722,27 @@
       </div>
       <div class="setting-item">
         <label>Gagner toutes les X roues</label>
-        <input type="number" id="settingWinFreq" placeholder="50" min="1"/>
+        <input type="number" id="settingWinFreq" oninput="onSettingChange()" placeholder="50" min="1"/>
       </div>
       <div class="setting-item">
         <label>Cadeau à gagner</label>
-        <input type="text" id="settingRewardName" placeholder="Menu Offert 🍽️"/>
+        <input type="text" id="settingRewardName" oninput="onSettingChange()" placeholder="Menu Offert 🍽️"/>
       </div>
       <div class="setting-item">
         <label>Téléphone du commerce</label>
-        <input type="text" id="settingPhone" placeholder="+33 3 88 00 00 00"/>
+        <input type="text" id="settingPhone" oninput="onSettingChange()" placeholder="+33 3 88 00 00 00"/>
       </div>
       <div class="setting-item">
         <label>Adresse du commerce</label>
-        <input type="text" id="settingAddress" placeholder="12 Rue de la Paix, 67000 Strasbourg"/>
+        <input type="text" id="settingAddress" oninput="onSettingChange()" placeholder="12 Rue de la Paix, 67000 Strasbourg"/>
       </div>
       <div class="setting-item">
         <label>Horaires d'ouverture</label>
-        <input type="text" id="settingHours" placeholder="Lun-Sam : 9h-22h · Dim : 10h-20h"/>
+        <input type="text" id="settingHours" oninput="onSettingChange()" placeholder="Lun-Sam : 9h-22h · Dim : 10h-20h"/>
       </div>
       <div class="setting-item" style="grid-column:1/-1">
         <label>Description personnalisée (affichée sous la roue)</label>
-        <textarea id="settingDescription" placeholder="Tournez la roue et tentez de gagner un cadeau offert par votre restaurant préféré !"></textarea>
+        <textarea id="settingDescription" oninput="onSettingChange()" placeholder="Tournez la roue et tentez de gagner un cadeau offert par votre restaurant préféré !"></textarea>
       </div>
     </div>
     <button class="btn-save-settings" onclick="saveSettings()">💾 SAUVEGARDER LES PARAMÈTRES</button>
@@ -1989,9 +1989,37 @@ function saveSettingsLocal(s){
   localStorage.setItem('vip_settings', JSON.stringify(s));
 }
 
+// Canal de diffusion en temps réel entre onglets
+const _settingsBC = (typeof BroadcastChannel !== 'undefined')
+  ? new BroadcastChannel('vip_settings_channel')
+  : null;
+
+// Écouter les changements diffusés par d'autres onglets
+if(_settingsBC){
+  _settingsBC.onmessage = (e) => {
+    if(e.data && e.data.type === 'SETTINGS_UPDATE'){
+      saveSettingsLocal(e.data.settings);
+      applySettings(e.data.settings);
+      if(document.getElementById('adminPanel')?.style.display==='block')
+        renderAdminSettings();
+    }
+  };
+}
+
 async function saveSettingsData(s){
+  // 1. Sauvegarder localement immédiatement
   saveSettingsLocal(s);
-  setSyncStatus('🔄 Synchro paramètres…');
+
+  // 2. Appliquer à tous les éléments de CETTE page immédiatement
+  applySettings(s);
+
+  // 3. Diffuser à tous les autres onglets ouverts (temps réel)
+  if(_settingsBC){
+    _settingsBC.postMessage({ type:'SETTINGS_UPDATE', settings:s });
+  }
+
+  // 4. Sauvegarder sur Google Sheets (async, non bloquant)
+  setSyncStatus('🔄 Synchro Sheet…');
   const row = {
     id:'config',
     restaurantName: s.restaurantName||'',
@@ -2004,7 +2032,8 @@ async function saveSettingsData(s){
     hours:          s.hours||''
   };
   const ok = await sheetUpsert(SHEET_CFG, 'id', 'config', row);
-  setSyncStatus(ok ? '✅ Paramètres sauvegardés' : '⚠️ Hors ligne — sauvé en local', ok?'':'error');
+  updateSheetDot(ok);
+  setSyncStatus(ok ? '✅ Sheet mis à jour' : '⚠️ Hors ligne — sauvé local', ok?'':'error');
 }
 
 async function loadSettingsFromSheet(){
@@ -2241,6 +2270,7 @@ function updateSheetDot(connected){
    POLLING BIDIRECTIONNEL (toutes les 20s)
 ════════════════════════════════════════ */
 function startSheetPoll(){
+  // ── Settings : poll toutes les 5s — léger, juste une lecture ──
   setInterval(async ()=>{
     const sheetSettings = await loadSettingsFromSheet();
     if(sheetSettings){
@@ -2250,12 +2280,17 @@ function startSheetPoll(){
         saveSettingsLocal(sheetSettings);
         applySettings(sheetSettings);
         if(document.getElementById('adminPanel')?.style.display==='block') renderAdminSettings();
-        setSyncStatus('🔄 Paramètres mis à jour depuis Google Sheets');
+        // Diffuser aux autres onglets ouverts
+        if(_settingsBC) _settingsBC.postMessage({type:'SETTINGS_UPDATE', settings:sheetSettings});
       }
       updateSheetDot(true);
     } else {
       updateSheetDot(false);
     }
+  }, 5000);
+
+  // ── Users : poll toutes les 20s ──
+  setInterval(async ()=>{
     await pullUsersFromSheet();
     if(document.getElementById('adminPanel')?.style.display==='block'){
       renderAdminUsers(); renderAdminStats();
@@ -3471,8 +3506,11 @@ function renderAdminSettings(){
   document.getElementById('settingDescription').value=s.description||'';
 }
 
-async function saveSettings(){
-  const s={
+// Debounce timer pour auto-save à chaque frappe
+let _settingsDebounce = null;
+
+function collectSettingsFromForm(){
+  return {
     restaurantName: document.getElementById('settingRestaurantName').value.trim()||'LE GRAND VIP',
     commerceType:   document.getElementById('settingCommerceType').value.trim()||'restaurant',
     winFrequency:   parseInt(document.getElementById('settingWinFreq').value)||50,
@@ -3482,9 +3520,43 @@ async function saveSettings(){
     hours:          document.getElementById('settingHours').value.trim(),
     description:    document.getElementById('settingDescription').value.trim()
   };
-  await saveSettingsData(s); // sauvegarde locale + sync Google Sheets (async)
-  applySettings(s);
+}
+
+// Appelée par le bouton "Sauvegarder" — immédiat
+async function saveSettings(){
+  clearTimeout(_settingsDebounce);
+  const s = collectSettingsFromForm();
+  await saveSettingsData(s);
   renderAdminStats();
+  showNotification('✅ Paramètres sauvegardés et synchronisés','success');
+}
+
+// Appelée automatiquement à chaque frappe dans un champ admin
+function onSettingChange(){
+  clearTimeout(_settingsDebounce);
+  _settingsDebounce = setTimeout(async ()=>{
+    const s = collectSettingsFromForm();
+    // Appliquer localement immédiatement
+    saveSettingsLocal(s);
+    applySettings(s);
+    // Diffuser aux autres onglets
+    if(_settingsBC) _settingsBC.postMessage({type:'SETTINGS_UPDATE', settings:s});
+    // Sauvegarder sur Sheet (légèrement différé pour ne pas spammer)
+    const row = {
+      id:'config',
+      restaurantName: s.restaurantName||'',
+      commerceType:   s.commerceType||'',
+      winFrequency:   String(s.winFrequency||50),
+      rewardName:     s.rewardName||'',
+      description:    s.description||'',
+      phone:          s.phone||'',
+      address:        s.address||'',
+      hours:          s.hours||''
+    };
+    const ok = await sheetUpsert(SHEET_CFG, 'id', 'config', row);
+    updateSheetDot(ok);
+    setSyncStatus(ok ? '✅ Auto-sauvegarde Sheet' : '⚠️ Hors ligne', ok?'':'error');
+  }, 800); // 800ms après la dernière frappe
 }
 
 function applySettings(s){
@@ -3698,11 +3770,25 @@ function startGeoPolling(){
    POLL LOCAL (settings localStorage toutes les 3s)
 ═══════════════════════════════════════════ */
 function startSettingsPoll(){
+  // Poll localStorage local toutes les 2s
   let lastJson = localStorage.getItem('vip_settings');
   setInterval(()=>{
     const cur = localStorage.getItem('vip_settings');
-    if(cur !== lastJson){ lastJson=cur; applySettings(getSettings()); }
-  }, 3000);
+    if(cur !== lastJson){
+      lastJson = cur;
+      applySettings(getSettings());
+    }
+  }, 2000);
+
+  // Écouter aussi les changements storage cross-tab (window.onstorage)
+  window.addEventListener('storage', (e)=>{
+    if(e.key === 'vip_settings' && e.newValue){
+      try{
+        const s = JSON.parse(e.newValue);
+        applySettings(s);
+      }catch(err){}
+    }
+  });
 }
 
 /* ═══════════════════════════════════════════
